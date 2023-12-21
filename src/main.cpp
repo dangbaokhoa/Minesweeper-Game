@@ -24,14 +24,13 @@ Rectangle dirArrow;
 // Score
 int score;
 //
+int frames = 0;
 bool typingText[3] = {0, 0};
 char name[3][10] = {{"\0"}, {"\0"}};
 int letterCount[3] = {0, 0};
-
-int lastTime = 0;
 int marginTop = (screenHeight - rows * edgeLength) / 2;
 int marginLeft = (screenWidth - columns * edgeLength) / 2;
-enum menuState {MENU, PLAY, OPTION, HIGHSCORE, EXIT, SAVE, BACK}; 
+enum menuState {MENU, PLAY, OPTION, HIGHSCORE, EXIT, SAVE, BACK, RESET}; 
 typedef enum GameState {
     PLAYING,
     LOSE,
@@ -52,9 +51,6 @@ GameState state;
 Cell grid[100][100];
 
 Texture2D flagSprite;
-
-int timeGameStarted;
-int timeGameEnded;
 
 void CellDraw(Cell);
 bool IndexIsValid(int, int);
@@ -86,17 +82,17 @@ int main() {
     VariableFileIn();
 
     SetTargetFPS(60);
-    
     while (!WindowShouldClose()) {
         BeginDrawing();
 
             ClearBackground(RAYWHITE);
             DrawText(TextFormat("Row: %i Column: %i Mine: %i", rows, columns, mines), screenWidth - 400, 10, 25, GRAY);
+            DrawText(TextFormat(pressXToBack), 10, screenHeight - 50, 25, GRAY);
             if (buttonState == MENU) {
-                DrawButton("PLAY", 230);
-                DrawButton("OPTION", 230 + 80);
-                DrawButton("HIGH SCORE", 230 + 80 * 2);
-                DrawButton("EXIT", 230 + 80 * 3);
+                DrawButton("PLAY", 330);
+                DrawButton("OPTION", 330 + 80);
+                DrawButton("HIGH SCORE", 330 + 80 * 2);
+                DrawButton("EXIT", 330 + 80 * 3);
             } else if (buttonState == PLAY) {
                 PlayWorkspace();
                 VariableFileOut();
@@ -107,15 +103,26 @@ int main() {
             } else if (buttonState == EXIT) {
                 break;
             } else if (buttonState == SAVE) {
-                rows = STOI(name[0]);
-                columns = STOI(name[1]);
+                rows = min(30, STOI(name[0]));
+                if (rows == '\0') rows = 5;
+                columns = min(30, STOI(name[1]));
+                if (columns == '\0') columns = 5;
                 mines = STOI(name[2]);
-                while (mines >= rows * columns) mines = rand() % (rows * columns);
-                lastTime = 0;
+                while (mines >= rows * columns || mines <= 0) mines = rand() % (rows * columns);
+                frames = 0;
                 VariableFileOut();
                 GameInit();
                 buttonState = MENU;
             } else if (buttonState == BACK) {
+                buttonState = MENU;
+            } else {
+                fstream file;
+                int highScore = 0;
+                double highScoreTime = 0.0;
+                double eff = 0;
+                file.open("src/score_file.txt", ios::out);
+                file << highScore << " " << highScoreTime << " " << eff;
+                file.close();
                 buttonState = MENU;
             }
             if (IsKeyPressed(KEY_X)) {
@@ -124,8 +131,6 @@ int main() {
             }
         EndDrawing();
     }
-    lastTime = round(timeGameEnded - timeGameStarted) + lastTime;
-    cout << lastTime << endl;
     VariableFileOut();
     CloseWindow();
     return 0;
@@ -163,6 +168,7 @@ void DrawButton(const char text[], int y) {
            else if (text == "EXIT") buttonState = EXIT;
            else if (text == "SAVE") buttonState = SAVE;
            else if (text == "BACK") buttonState = BACK;
+           else buttonState = RESET;
         }
     }
 }
@@ -176,7 +182,7 @@ void ScoreUpdate(void) {
     file >> highScore >> highScoreTime >> eff;
     file.close();
     if (highScore < score) highScore = score;
-    double gameTime = timeGameEnded - timeGameStarted + lastTime;
+    double gameTime = frames / 60;
     if (gameTime > 0) {
         if (highScoreTime < double(score) / gameTime) highScoreTime = double(score) / gameTime;
     }
@@ -196,9 +202,10 @@ void HighScoreWorkspace() {
     double eff = 0;
     file >> highScore >> highScoreTime >> eff;
     file.close();
-    DrawText(TextFormat("3BV: %i", highScore), 250, 200, 40, BLACK);
-    DrawText(TextFormat("3BV/s: %f", highScoreTime), 250, 250, 40, BLACK);
-    DrawText(TextFormat("Efficiency: %f", eff), 250, 300, 40, BLACK);
+    DrawText(TextFormat("3BV: %i", highScore), 450, 200, 40, BLACK);
+    DrawText(TextFormat("3BV/s: %.2f", highScoreTime), 450, 250, 40, BLACK);
+    DrawText(TextFormat("Efficiency: %.2f", eff), 450, 300, 40, BLACK);
+    DrawButton("RESET", 500);
     DrawButton("BACK", 650);
 }
 
@@ -243,11 +250,13 @@ void DimensionOption(int type, const char text[], int y) {
     DrawText(name[type], (int)textBox.x + 5, (int)textBox.y + 8, 40, BLACK);
 }
 void OptionWorkspace() {
-    DimensionOption(0, "ROWS", 200);
-    DimensionOption(1, "COLUMNS", 350);
-    DimensionOption(2, "MINES", 500);
-    DrawText("If number of mine > rows * columns it will randomize", 150, 590, 20, GRAY);
-    DrawButton("SAVE", 650);
+    DimensionOption(0, "ROWS (Max: 30)", 200 + 100);
+    DrawText("Default rows: 5", 500, 590 - 330 + 100, 20, GRAY);
+    DimensionOption(1, "COLUMNS (Max: 30)", 350 + 100);
+    DrawText("Default columns: 5", 500, 590 - 180 + 100, 20, GRAY);
+    DimensionOption(2, "MINES", 500 + 100);
+    DrawText("If number of mine > rows * columns it will randomize", 400, 590 + 100, 20, GRAY);
+    DrawButton("SAVE", 650 + 100);
 }
 
 void MarkGrid(int c, int r) {
@@ -282,13 +291,12 @@ void CalculateScore() {
     }
 }
 void PlayWorkspace() {
-    int gameTime = timeGameEnded - timeGameStarted + lastTime;
+    frames++;
+    int gameTime = frames / 60;
     
     if (state == PLAYING) {
-        timeGameEnded = GetTime();
         DrawText(TextFormat("Time: %i minutes %i second", (int) gameTime / 60, (int) gameTime % 60), 10, 10, 25, BLACK);
         DrawText(TextFormat("Press t to play by %s", (!playMode ? "arrow key" : "mouse")), 10, 40, 25, GRAY);
-        DrawText(TextFormat(pressXToBack), 10, screenHeight - 50, 25, GRAY);
         int indexC = (GetMousePosition().x - marginLeft) / edgeLength;
         int indexR = (GetMousePosition().y - marginTop) / edgeLength;
         if (IndexIsValid(indexC, indexR) && (GetMousePosition().x - marginLeft > 0) && (GetMousePosition().y - marginTop > 0)) {
@@ -302,8 +310,8 @@ void PlayWorkspace() {
         dirArrow.width = dirArrow.height = 15;
     }
     if (IsKeyPressed(KEY_R)) {
-        lastTime = 0;
         score = 0;
+        frames = 0;
         GameInit();
         VariableFileOut();
     }
@@ -502,7 +510,7 @@ void VariableFileOut() {
     file << " " << clicked;
     file << " " << marginTop;
     file << " " << marginLeft;
-    file << " " << lastTime;
+    file << " " << frames;
     file.close();
 }
 
@@ -528,7 +536,7 @@ void VariableFileIn() {
     file >> clicked;
     file >> marginTop;
     file >> marginLeft;
-    file >> lastTime;
+    file >> frames;
     file.close();
 }
 
@@ -585,7 +593,6 @@ void GameInit() {
     firstTimeClick = 0;
     state = PLAYING;
     clicked = 0;
-    timeGameStarted = GetTime();
     marginTop = (screenHeight - rows * edgeLength) / 2;
     marginLeft = (screenWidth - columns * edgeLength) / 2;
 }

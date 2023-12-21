@@ -75,7 +75,7 @@ void ScoreUpdate();
 void VariableFileIn();
 void VariableFileOut();
 int STOI(const char []);
-
+void CellRevealed(int, int);
 int main() {
     srand(time(0));
     InitWindow(screenWidth, screenHeight, "Raylib Template");
@@ -320,6 +320,11 @@ void PlayWorkspace() {
         DrawText(pressRToRestart, screenWidth / 2 - MeasureText(pressRToRestart, 20) / 2, screenHeight * 0.75 - 10, 20, DARKGRAY);
         DrawText(pressXToBack, screenWidth / 2 - MeasureText(pressXToBack, 20) / 2, screenHeight * 0.75 + 20, 20, DARKGRAY);
         DrawText(TextFormat("Time: %i minutes %i second", (int) gameTime / 60, (int) gameTime % 60), screenWidth / 2 - 120, screenHeight * 0.75 + 50, 20, DARKGRAY);
+        for (int i = 0; i < rows; i++) {
+            for (int j = 0; j < columns; j++) {
+                if (grid[i][j].containsMine) grid[i][j].revealed = 1;
+            }
+        }
         return;
     } else if (state == WIN) {
         ScoreUpdate();
@@ -343,6 +348,7 @@ void PlayWorkspace() {
                     CalculateScore();
                 }
                 if (!grid[indexC][indexR].revealed) clicked++;
+                else CellRevealed(indexC, indexR);
                 CellReveal(indexC, indexR);
             }
         } 
@@ -373,6 +379,7 @@ void PlayWorkspace() {
                     CalculateScore();
                 }
                 if (!grid[indexC][indexR].revealed) clicked++;
+                else CellRevealed(indexC, indexR);
                 CellReveal(indexC, indexR);
             }
         }
@@ -458,7 +465,8 @@ void GridFloodClearFrom(int c, int r) {
 }
 
 void CellReveal(int c, int r) {
-    if (grid[c][r].flagged || grid[c][r].revealed) return;
+    if (grid[c][r].flagged) return;
+    if (grid[c][r].revealed) return ;
 
     grid[c][r].revealed = 1;
     tileRevealed++;
@@ -536,6 +544,36 @@ void GridInit(void) {
             .nearbyMines = 0,
             .mark = 0
             };
+        }
+    }
+}
+
+void CellRevealed(int c, int r) {
+    int flagCount = 0;
+    for (int i = -1; i <= 1; i++) {
+        for (int j = -1; j <= 1; j++) {
+            if (!i && !j) continue;
+            if (!IndexIsValid(c + i, r + j)) continue;
+            flagCount += grid[c + i][r + j].flagged;
+        }
+    }
+    if (flagCount == grid[c][r].nearbyMines) {
+        for (int i = -1; i <= 1; i++) {
+            for (int j = -1; j <= 1; j++) {
+                if (!i && !j) continue;
+                if (!IndexIsValid(c + i, r + j)) continue;
+                if (grid[c + i][r + j].flagged) continue;
+                if (grid[c + i][r + j].containsMine) {
+                    state = LOSE;
+                    return ;
+                } else {
+                    if (!grid[c + i][r + j].revealed == 1) tileRevealed++;
+                    grid[c + i][r + j].revealed = 1;
+                    if (tileRevealed == rows * columns - mines) {
+                        state = WIN;
+                    }
+                }
+            }
         }
     }
 }

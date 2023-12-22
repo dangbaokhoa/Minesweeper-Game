@@ -16,6 +16,7 @@ const char* pressXToBack = "Press 'x' to go back to main menu";
 // Information
 int mines = 5;
 int rows = 12, columns = 12;
+int newR, newC, newM, newF;
 int tileRevealed = 0;
 bool firstTimeClick = false;
 int clicked;
@@ -25,9 +26,6 @@ Rectangle dirArrow;
 int score;
 //
 int frames = 0;
-bool typingText[3] = {0, 0};
-char name[3][10] = {{"\0"}, {"\0"}};
-int letterCount[3] = {0, 0};
 int marginTop = (screenHeight - rows * edgeLength) / 2;
 int marginLeft = (screenWidth - columns * edgeLength) / 2;
 enum menuState {MENU, PLAY, OPTION, HIGHSCORE, EXIT, SAVE, BACK, RESET}; 
@@ -63,14 +61,13 @@ void GameInit();
 void DrawButton(const char [], int);
 void PlayWorkspace();
 void OptionWorkspace();
-void DimensionOption(int, const char []);
+void DimensionOption(int, const char [], int, int&);
 void HighScoreWorkspace();
 void CalculateScore();
-void MarkGrid();
+void MarkGrid(int, int);
 void ScoreUpdate();
 void VariableFileIn();
 void VariableFileOut();
-int STOI(const char []);
 void CellRevealed(int, int);
 int main() {
     srand(time(0));
@@ -87,28 +84,27 @@ int main() {
 
             ClearBackground(RAYWHITE);
             DrawText(TextFormat("Row: %i Column: %i Mine: %i", rows, columns, mines), screenWidth - 400, 10, 25, GRAY);
-            DrawText(TextFormat(pressXToBack), 10, screenHeight - 50, 25, GRAY);
+            if (buttonState != MENU) DrawText(TextFormat(pressXToBack), 10, screenHeight - 50, 25, GRAY);
             if (buttonState == MENU) {
-                DrawButton("PLAY", 330);
-                DrawButton("OPTION", 330 + 80);
-                DrawButton("HIGH SCORE", 330 + 80 * 2);
-                DrawButton("EXIT", 330 + 80 * 3);
+                DrawText("MINESWEEPER", 320, 430 - 200, 80, MAGENTA);
+                DrawButton("PLAY", 430);
+                DrawButton("OPTION", 430 + 80);
+                DrawButton("HIGH SCORE", 430 + 80 * 2);
+                DrawButton("EXIT", 430 + 80 * 3);
+                newF = 1;
             } else if (buttonState == PLAY) {
                 PlayWorkspace();
                 VariableFileOut();
             } else if (buttonState == OPTION) {
+                if (newF) newR = rows, newC = columns, newM = mines;
+                newF = 0;
                 OptionWorkspace();
             } else if (buttonState == HIGHSCORE) {
                 HighScoreWorkspace();
             } else if (buttonState == EXIT) {
                 break;
             } else if (buttonState == SAVE) {
-                rows = min(30, STOI(name[0]));
-                if (rows == '\0') rows = 5;
-                columns = min(30, STOI(name[1]));
-                if (columns == '\0') columns = 5;
-                mines = STOI(name[2]);
-                while (mines >= rows * columns || mines <= 0) mines = rand() % (rows * columns);
+                rows = newR, columns = newC, mines = newM;
                 frames = 0;
                 VariableFileOut();
                 GameInit();
@@ -134,14 +130,6 @@ int main() {
     VariableFileOut();
     CloseWindow();
     return 0;
-}
-
-int STOI(const char text[]) {
-    int num = 0;
-    for (int i = 0; text[i] != ' ' && text[i] != '_' && text[i] != '\0' && i < 10; i++) {
-        num = num * 10 + (int) text[i] - 48;
-    }
-    return num;
 }
 
 void DrawButton(const char text[], int y) {
@@ -209,53 +197,46 @@ void HighScoreWorkspace() {
     DrawButton("BACK", 650);
 }
 
-void DimensionOption(int type, const char text[], int y) {
-    Rectangle textBox = {(screenWidth - 200) * 0.5f, y * 1.0f, 200, 50};
-    bool mouseOnText = false;
-    if (CheckCollisionPointRec(GetMousePosition(), textBox)) {
-        mouseOnText = true;
-    } 
+void DimensionOption(int type, const char text[], int y, int& cur) {
+    Rectangle textBoxInc = {(screenWidth - 200) * 0.5f + 200, y * 1.0f, 30, 30};
+    Rectangle textBoxDec = {(screenWidth - 200) * 0.5f + 200, y * 1.0f + 30, 30, 30};
+
     if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-        if (CheckCollisionPointRec(GetMousePosition(), textBox)) {
-           typingText[type] = true; 
-        }  else typingText[type] = false;
-    }
-
-    if (typingText[type]) {
-        int key = GetCharPressed();
-
-        while (key > 0) {
-            if ((key >= 32) && (key <= 125)) {
-                name[type][letterCount[type]] = (char) key;
-                name[type][letterCount[type] + 1] = '\0';
-                letterCount[type]++;
-            }
-            key = GetCharPressed();
+        if (CheckCollisionPointRec(GetMousePosition(), textBoxInc)) {
+            cur++;
         }
-        if (IsKeyPressed(KEY_BACKSPACE)) {
-            name[type][letterCount[type]] = '\0';
-            letterCount[type]--;
-            if (letterCount[type] < 0) letterCount[type] = 0;
-            name[type][letterCount[type]] = '\0';
-        }  
+        if (CheckCollisionPointRec(GetMousePosition(), textBoxDec)) {
+            cur--;
+        }
     }
-    DrawText(text, (int)textBox.x, (int) textBox.y - 50, 40, GRAY); 
-    if (mouseOnText || typingText[type]) {
-        name[type][letterCount[type]] = '_';
-    } else name[type][letterCount[type]] = '\0';
-    DrawRectangleRec(textBox, WHITE);
-    if (mouseOnText) SetMouseCursor(MOUSE_CURSOR_IBEAM);
-    else SetMouseCursor(MOUSE_CURSOR_DEFAULT);
-    DrawRectangleLines((int)textBox.x, (int)textBox.y, (int)textBox.width, (int)textBox.height, DARKGRAY);
-    DrawText(name[type], (int)textBox.x + 5, (int)textBox.y + 8, 40, BLACK);
+    //
+    DrawRectangleRec(textBoxInc, WHITE);
+    DrawRectangleLines((int)textBoxInc.x, (int)textBoxInc.y, (int)textBoxInc.width, (int)textBoxInc.height, DARKGRAY);
+    DrawText(TextFormat("%s", "+"), (int)textBoxInc.x + 5, (int) textBoxInc.y, 40, GRAY); 
+    //
+    //
+    DrawRectangleRec(textBoxDec, WHITE);
+    DrawRectangleLines((int)textBoxDec.x, (int)textBoxDec.y, (int)textBoxDec.width, (int)textBoxDec.height, DARKGRAY);
+    DrawText(TextFormat("%s", "_"), (int)textBoxDec.x + 5, (int) textBoxDec.y - 10, 40, GRAY); 
+    //
+    DrawText(text, (int)textBoxInc.x - 300, (int) textBoxInc.y, 40, GRAY); 
+    DrawText(TextFormat("%i", cur), (int)textBoxInc.x - 100, (int) textBoxInc.y, 40, RED); 
+    if (text == "ROW" || text == "COLUMN") {
+        if (cur > 30) cur--;
+        else if (cur < 2) cur++;
+    } 
+    if (text == "MINE") {
+        if (cur >= newR * newC) cur--;
+        else if (cur < 1) cur++;
+    }
 }
 void OptionWorkspace() {
-    DimensionOption(0, "ROWS (Max: 30)", 200 + 100);
-    DrawText("Default rows: 5", 500, 590 - 330 + 100, 20, GRAY);
-    DimensionOption(1, "COLUMNS (Max: 30)", 350 + 100);
-    DrawText("Default columns: 5", 500, 590 - 180 + 100, 20, GRAY);
-    DimensionOption(2, "MINES", 500 + 100);
-    DrawText("If number of mine > rows * columns it will randomize", 400, 590 + 100, 20, GRAY);
+    DimensionOption(0, "ROW", 200 + 100, newR);
+    DrawText(TextFormat("Max rows: %i", 30), 400, 300 + 50, 20, GRAY);
+    DimensionOption(1, "COLUMN", 350 + 100, newC);
+    DrawText(TextFormat("Max columns: %i", 30), 400, 450 + 50, 20, GRAY);
+    DimensionOption(2, "MINE", 500 + 100, newM);
+    DrawText(TextFormat("Max mines: %i", newR * newC - 1), 400, 590 + 70, 20, GRAY);
     DrawButton("SAVE", 650 + 100);
 }
 
@@ -291,7 +272,7 @@ void CalculateScore() {
     }
 }
 void PlayWorkspace() {
-    frames++;
+    if (state == PLAYING) frames++;
     int gameTime = frames / 60;
     
     if (state == PLAYING) {
@@ -299,7 +280,7 @@ void PlayWorkspace() {
         DrawText(TextFormat("Press t to play by %s", (!playMode ? "arrow key" : "mouse")), 10, 40, 25, GRAY);
         int indexC = (GetMousePosition().x - marginLeft) / edgeLength;
         int indexR = (GetMousePosition().y - marginTop) / edgeLength;
-        if (IndexIsValid(indexC, indexR) && (GetMousePosition().x - marginLeft > 0) && (GetMousePosition().y - marginTop > 0)) {
+        if (IndexIsValid(indexC, indexR) && (GetMousePosition().x - marginLeft > 0) && (GetMousePosition().y - marginTop > 0) && playMode == 0) {
             DrawRectangle(indexC * edgeLength + marginLeft, indexR * edgeLength + marginTop, edgeLength, edgeLength, BLUE);
         }
     }
@@ -372,14 +353,14 @@ void PlayWorkspace() {
     } else {
         DrawText(TextFormat("Press shift to flag"), 10, 80, 25, GRAY);
         if (IsKeyReleased(KEY_RIGHT)) if (IndexIsValid((dirArrow.x + edgeLength - marginLeft) / edgeLength, (dirArrow.y - marginTop) / edgeLength)) dirArrow.x += edgeLength;
-        if (IsKeyReleased(KEY_LEFT)) if (IndexIsValid((dirArrow.x - edgeLength - marginLeft) / edgeLength, (dirArrow.y - marginTop) / edgeLength)) dirArrow.x -= edgeLength;
-        if (IsKeyReleased(KEY_UP)) if (IndexIsValid((dirArrow.x - marginLeft) / edgeLength, (dirArrow.y - marginTop - edgeLength) / edgeLength)) dirArrow.y -= edgeLength;
+        if (IsKeyReleased(KEY_LEFT)) if (IndexIsValid((dirArrow.x - edgeLength - marginLeft) / edgeLength, (dirArrow.y - marginTop) / edgeLength) && (dirArrow.x - edgeLength - marginLeft > 0)) dirArrow.x -= edgeLength;
+        if (IsKeyReleased(KEY_UP)) if (IndexIsValid((dirArrow.x - marginLeft) / edgeLength, (dirArrow.y - marginTop - edgeLength) / edgeLength) && (dirArrow.y - marginTop - edgeLength > 0)) dirArrow.y -= edgeLength;
         if (IsKeyReleased(KEY_DOWN)) if (IndexIsValid((dirArrow.x - marginLeft) / edgeLength, (dirArrow.y - marginTop + edgeLength) / edgeLength)) dirArrow.y += edgeLength;
         DrawRectangleRec(dirArrow, MAROON);
         if (IsKeyReleased(KEY_ENTER)) {
             int indexC = (dirArrow.x - marginLeft) / edgeLength;
             int indexR = (dirArrow.y - marginTop) / edgeLength;
-            if (IndexIsValid(indexC, indexR) && (dirArrow.x - marginLeft) > 0 && (dirArrow.y - marginTop) > 0) {
+            if (IndexIsValid(indexC, indexR) && (dirArrow.x - marginLeft > 0) && (dirArrow.y - marginTop > 0)) {
                 if (!firstTimeClick) {
                     firstTimeClick = true;
                     PlaceMine(grid[indexC][indexR]);
